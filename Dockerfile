@@ -1,30 +1,33 @@
-# 1. Usa l'immagine ufficiale Python 3.12 slim (leggera)
+# Official Python 3.12 slim image
 FROM python:3.12-slim
 
-# 2. Installa le dipendenze di sistema necessarie
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
     ca-certificates \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Imposta la directory di lavoro
+# Set working directory
 WORKDIR /app
 
-# 4. Prima copia solo requirements.txt per caching degli strati Docker
+# Copy requirements first for better layer caching
 COPY requirements.txt .
 
-# 5. Installa le dipendenze Python
+# Install Python dependencies
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# 6. Ora copia tutto il resto del codice
+# Copy application code
 COPY . .
 
-# 7. Esponi la porta (Render userà la variabile $PORT)
-EXPOSE 7860
+# Expose port (Render.com will use $PORT)
+EXPOSE 10000
 
-# 8. Comando di avvio ottimizzato per Render.com
+# Optimized Gunicorn configuration for proxy server:
+# - 4 worker processes
+# - Sync worker class (better for I/O bound apps)
+# - 120s timeout for streaming
+# - Keep-alive for persistent connections
 CMD ["gunicorn", "app:app", \
     "--bind", "0.0.0.0:$PORT", \
     "--workers", "4", \
@@ -32,7 +35,6 @@ CMD ["gunicorn", "app:app", \
     "--timeout", "120", \
     "--keep-alive", "5", \
     "--max-requests", "1000", \
-    "--max-requests-jitter", "50", \
     "--access-logfile", "-", \
     "--error-logfile", "-", \
     "--log-level", "info"]
