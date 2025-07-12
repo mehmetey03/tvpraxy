@@ -1,9 +1,7 @@
-# Dockerfile per TVProxy - Server Proxy con Gunicorn
-
-# 1. Usa l'immagine base ufficiale di Python 3.12 slim
+# 1. Usa l'immagine ufficiale Python 3.12 slim (leggera)
 FROM python:3.12-slim
 
-# 2. Installa git e certificati SSL (per clonare da GitHub e HTTPS)
+# 2. Installa le dipendenze di sistema necessarie
 RUN apt-get update && apt-get install -y \
     git \
     ca-certificates \
@@ -13,29 +11,28 @@ RUN apt-get update && apt-get install -y \
 # 3. Imposta la directory di lavoro
 WORKDIR /app
 
-# 4. Copia il codice dell'applicazione
+# 4. Prima copia solo requirements.txt per caching degli strati Docker
+COPY requirements.txt .
+
+# 5. Installa le dipendenze Python
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# 6. Ora copia tutto il resto del codice
 COPY . .
 
-# 6. Aggiorna pip e installa le dipendenze senza cache
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
-
-# 7. Espone la porta 7860 per Gunicorn
+# 7. Esponi la porta (Render userà la variabile $PORT)
 EXPOSE 7860
 
-# 8. Comando per avviare Gunicorn ottimizzato per proxy server
-#    - 4 worker per gestire più clienti
-#    - Worker class sync (più stabile per proxy HTTP)
-#    - Timeout adeguati per streaming
-#    - Logging su stdout/stderr
+# 8. Comando di avvio ottimizzato per Render.com
 CMD ["gunicorn", "app:app", \
-     "-w", "4", \
-     "--worker-class", "sync", \
-     "-b", "0.0.0.0:7860", \
-     "--timeout", "120", \
-     "--keep-alive", "5", \
-     "--max-requests", "1000", \
-     "--max-requests-jitter", "100", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "--log-level", "info"]
+    "--bind", "0.0.0.0:$PORT", \
+    "--workers", "4", \
+    "--worker-class", "sync", \
+    "--timeout", "120", \
+    "--keep-alive", "5", \
+    "--max-requests", "1000", \
+    "--max-requests-jitter", "50", \
+    "--access-logfile", "-", \
+    "--error-logfile", "-", \
+    "--log-level", "info"]
